@@ -48,6 +48,11 @@ async function scanForTarget() {
             const fdv = p.fdv || 0;
             const ageHours = (Date.now() - p.pairCreatedAt) / (1000 * 60 * 60);
             
+            // DEBUG: Log first pair to see data structure
+            if (pairs.indexOf(p) === 0) {
+                 log(`DEBUG Sample: ${p.baseToken.symbol} | Liq: $${liq} | Age: ${ageHours.toFixed(2)}h | Created: ${p.pairCreatedAt}`, 'DEBUG');
+            }
+
             return (
                 p.chainId === 'solana' &&
                 p.quoteToken.symbol === 'SOL' &&
