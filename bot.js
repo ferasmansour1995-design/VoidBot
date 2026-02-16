@@ -55,7 +55,7 @@ async function scanForTarget() {
 
             return (
                 p.chainId === 'solana' &&
-                p.quoteToken.symbol === 'SOL' &&
+                (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s') &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
                 fdv >= CONFIG.MIN_FDV
                 // REMOVED AGE CHECK due to missing API data
