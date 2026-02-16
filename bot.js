@@ -37,8 +37,8 @@ function log(msg, type = 'INFO') {
 async function scanForTarget() {
     log("Scanning DexScreener Trending...", 'SCAN');
     try {
-        // Fetch Trending Pairs
-        const url = `https://api.dexscreener.com/latest/dex/search?q=solana`;
+        // Fetch Top Pairs for WSOL (So11111111111111111111111111111111111111112)
+        const url = `https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112`;
         const resp = await axios.get(url, { timeout: 5000 });
         const pairs = resp.data.pairs || [];
 
