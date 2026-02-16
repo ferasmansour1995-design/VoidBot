@@ -3,8 +3,8 @@ require('dotenv').config();
 
 module.exports = {
   // Network
-  RPC_URL: process.env.RPC_URL || 'https://multi-aged-energy.solana-mainnet.quiknode.pro/6104800d25a31cde6bd896423a5f35f076fa59a7/',
-  WSS_URL: process.env.WSS_URL || 'wss://multi-aged-energy.solana-mainnet.quiknode.pro/6104800d25a31cde6bd896423a5f35f076fa59a7/',
+  RPC_URL: process.env.RPC_URL,
+  WSS_URL: process.env.WSS_URL,
   
   // Strategy: The Void Protocol (Paper Mode)
   STRATEGY: {
