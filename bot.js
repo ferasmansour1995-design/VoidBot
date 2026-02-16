@@ -8,8 +8,8 @@ const CONFIG = {
     RPC_URL: process.env.SOLANA_RPC_URL,
     
     // SCANNING
-    SCAN_INTERVAL_MS: 30000,   // Scan trending every 30s
-    PRICE_CHECK_MS: 3000,      // Check active trade every 3s
+    SCAN_INTERVAL_MS: 60000,   // Scan trending every 60s (was 30s)
+    PRICE_CHECK_MS: 5000,      // Check active trade every 5s (was 3s)
     
     // FILTERS (The "Survivor" Logic)
     MIN_LIQUIDITY_USD: 10000,
