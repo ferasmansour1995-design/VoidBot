@@ -1,10 +1,14 @@
 // Void Protocol Configuration
 require('dotenv').config();
 
+// FALBACK: If no env var is set, use this Helius key directly
+const HARDCODED_RPC = 'https://mainnet.helius-rpc.com/?api-key=859c8449-6d29-4cbc-a267-18e055abe2c1';
+const HARDCODED_WSS = 'wss://mainnet.helius-rpc.com/?api-key=859c8449-6d29-4cbc-a267-18e055abe2c1';
+
 module.exports = {
   // Network
-  RPC_URL: process.env.RPC_URL,
-  WSS_URL: process.env.WSS_URL,
+  RPC_URL: process.env.RPC_URL || HARDCODED_RPC,
+  WSS_URL: process.env.WSS_URL || HARDCODED_WSS,
   
   // Strategy: The Void Protocol (Paper Mode)
   STRATEGY: {
