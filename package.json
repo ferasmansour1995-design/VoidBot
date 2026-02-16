@@ -1,0 +1,12 @@
+{
+  "name": "solana-paper-trader",
+  "version": "1.0.0",
+  "description": "High-frequency paper trading bot for Solana",
+  "main": "bot.js",
+  "dependencies": {
+    "@solana/web3.js": "^1.91.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0",
+    "chalk": "^4.1.2"
+  }
+}
