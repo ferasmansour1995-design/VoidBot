@@ -50,15 +50,15 @@ async function scanForTarget() {
             
             // DEBUG: Log first pair to see data structure
             if (pairs.indexOf(p) === 0) {
-                 log(`DEBUG Sample: ${p.baseToken.symbol} | Liq: $${liq} | Age: ${ageHours.toFixed(2)}h | Created: ${p.pairCreatedAt}`, 'DEBUG');
+                 log(`DEBUG Sample: ${p.baseToken.symbol} | Liq: $${liq}`, 'DEBUG');
             }
 
             return (
                 p.chainId === 'solana' &&
                 p.quoteToken.symbol === 'SOL' &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
-                fdv >= CONFIG.MIN_FDV &&
-                ageHours >= CONFIG.MIN_PAIR_AGE_HOURS
+                fdv >= CONFIG.MIN_FDV
+                // REMOVED AGE CHECK due to missing API data
             );
         });
 
