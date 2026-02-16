@@ -12,9 +12,9 @@ const CONFIG = {
     PRICE_CHECK_MS: 3000,      // Check active trade every 3s
     
     // FILTERS (The "Survivor" Logic)
-    MIN_LIQUIDITY_USD: 50000,
-    MIN_FDV: 100000,
-    MIN_PAIR_AGE_HOURS: 6,     // Avoid brand new rugs
+    MIN_LIQUIDITY_USD: 10000,
+    MIN_FDV: 50000,
+    MIN_PAIR_AGE_HOURS: 1,     // Avoid brand new rugs
     
     // TRADING
     BUY_AMOUNT_USD: 3.33,      // 1/3 of Portfolio per trade
