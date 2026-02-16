@@ -50,7 +50,7 @@ async function scanForTarget() {
             
             // DEBUG: Log first pair to see data structure
             if (pairs.indexOf(p) === 0) {
-                 log(`DEBUG Sample: ${p.baseToken.symbol} | Liq: $${liq}`, 'DEBUG');
+                 log(`DEBUG Sample: ${p.baseToken.symbol}/${p.quoteToken.symbol} | Liq: $${liq}`, 'DEBUG');
             }
 
             return (
