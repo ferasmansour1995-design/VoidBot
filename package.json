@@ -1,0 +1,19 @@
+{
+  "name": "void-trader",
+  "version": "1.0.0",
+  "description": "Solana Paper Trading Bot - Void Protocol",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.91.0",
+    "bs58": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "node-fetch": "^3.3.2",
+    "chalk": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
