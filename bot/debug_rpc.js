@@ -1,87 +1,54 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
-const WebSocket = require('ws');
-const config = require('./config');
+require('dotenv').config(); // Load .env file
 
-const RPC_URL = config.RPC_URL;
-const WSS_URL = config.WSS_URL;
+// Use the config or fallback to process.env
+const WSS_URL = process.env.WSS_URL;
+const HTTP_URL = process.env.RPC_URL;
 
-console.log('🌑 VOID PROTOCOL: RPC Connection Test (Debug Mode)');
-console.log(`📡 Testing RPC: ${RPC_URL.slice(0, 40)}...`);
-console.log(`📡 Testing WSS: ${WSS_URL.slice(0, 40)}...`);
-
-async function testRPC() {
-    try {
-        console.log('\n[1/3] Testing HTTP RPC Connection...');
-        const connection = new Connection(RPC_URL, 'confirmed');
-        const slot = await connection.getSlot();
-        console.log(`✅ RPC Success! Current Slot: ${slot}`);
-        return true;
-    } catch (e) {
-        console.error(`❌ RPC Failed: ${e.message}`);
-        if (e.message.includes('403')) console.error('⚠️  Error 403: Forbidden (Your IP is blocked or API Key is invalid).');
-        if (e.message.includes('429')) console.error('⚠️  Error 429: Rate Limited (Too many requests).');
-        return false;
-    }
+if (!WSS_URL || !HTTP_URL) {
+    console.error("❌ Missing RPC_URL or WSS_URL in .env");
+    process.exit(1);
 }
 
-async function testWSS() {
-    console.log('\n[2/3] Testing WebSocket Connection (WSS)...');
-    return new Promise((resolve) => {
-        const ws = new WebSocket(WSS_URL);
-        
-        const timeout = setTimeout(() => {
-            console.error('❌ WSS Timeout (10s): Connection hung.');
-            ws.terminate();
-            resolve(false);
-        }, 10000);
+console.log("🔍 Testing RPC Connection...");
+console.log(`HTTP: ${HTTP_URL}`);
+console.log(`WSS:  ${WSS_URL}`);
 
-        ws.on('open', () => {
-            console.log('✅ WSS Connected! Socket is Open.');
-            // Send a subscription request to verify it works
-            const subscribeMsg = {
-                jsonrpc: "2.0",
-                id: 1,
-                method: "logsSubscribe",
-                params: [
-                    { mentions: [ "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" ] }, // Raydium
-                    { commitment: "confirmed" }
-                ]
-            };
-            ws.send(JSON.stringify(subscribeMsg));
-            console.log('📡 Sent subscription request...');
-        });
+const connection = new Connection(HTTP_URL, {
+    wsEndpoint: WSS_URL,
+    commitment: 'confirmed'
+});
 
-        ws.on('message', (data) => {
-            console.log(`✅ WSS Message Received: ${data.toString().slice(0, 100)}...`);
-            clearTimeout(timeout);
-            ws.close();
-            resolve(true);
-        });
-
-        ws.on('error', (err) => {
-            console.error(`❌ WSS Error: ${err.message}`);
-            clearTimeout(timeout);
-            resolve(false);
-        });
-
-        ws.on('close', (code, reason) => {
-            console.log(`⚠️ WSS Closed. Code: ${code}, Reason: ${reason}`);
-        });
-    });
-}
+const RAYDIUM_PUBLIC_KEY = new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
 
 async function main() {
-    const rpcOk = await testRPC();
-    const wssOk = await testWSS();
-
-    console.log('\n[3/3] Final Verdict:');
-    if (rpcOk && wssOk) {
-        console.log('✅ GREEN LIGHT: Connection is healthy. The bot should work.');
-    } else {
-        console.log('❌ RED LIGHT: Connection issues detected.');
-        if (!rpcOk) console.log('👉 RPC endpoint is down or blocking you.');
-        if (!wssOk) console.log('👉 WSS endpoint is failing (Firewall? API Key?).');
+    // 1. Test HTTP (Slot Height)
+    try {
+        const slot = await connection.getSlot();
+        console.log(`✅ HTTP Connection OK. Current Slot: ${slot}`);
+    } catch (e) {
+        console.error(`❌ HTTP Connection FAILED: ${e.message}`);
+        return;
     }
+
+    // 2. Test WebSocket (Logs Subscription)
+    console.log("📡 Subscribing to Raydium Logs (waiting 10s)...");
+    
+    const subId = connection.onLogs(
+        RAYDIUM_PUBLIC_KEY,
+        (logs) => {
+            console.log(`🔥 LOG RECEIVED! Sig: ${logs.signature}`);
+            // If we get one, we know it works.
+            process.exit(0);
+        },
+        'confirmed'
+    );
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+        console.log("❌ No logs received after 30 seconds. WebSocket might be blocked or silent.");
+        process.exit(1);
+    }, 30000);
 }
 
-main().catch(console.error);
+main();
