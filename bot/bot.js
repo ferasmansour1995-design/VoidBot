@@ -457,27 +457,49 @@ async function main() {
     console.log('👀 Watching for new Raydium Pools...');
 
     // Subscribe to logs for Raydium V4
-    connection.onLogs(
-        RAYDIUM_PROGRAM_ID,
-        async (logs, context) => {
-            if (logs.err) return;
+    console.log(`🔌 Subscribing to Raydium Program logs...`);
+    
+    let lastLogTime = Date.now();
 
-            // DEBUG: Print first 50 chars of logs to prove connection is alive
-            console.log(`📡 Raydium Activity: ${logs.signature.slice(0,8)}...`);
+    try {
+        const subId = connection.onLogs(
+            RAYDIUM_PROGRAM_ID,
+            async (logs, context) => {
+                if (logs.err) return;
 
-            // Check for 'initialize2' instruction (New Pool Creation)
-            const isNewPool = logs.logs.some(log => log.includes('initialize2') || log.includes('InitializeInstruction2'));
-            
-            if (isNewPool) {
-                const signature = logs.signature;
-                console.log(`\n🆕 NEW POOL DETECTED: https://solscan.io/tx/${signature}`);
+                // Update last activity time
+                lastLogTime = Date.now();
+
+                // DEBUG: Print first 50 chars of logs to prove connection is alive
+                // Only print 1 out of every 10 logs to reduce noise, but prove life
+                if (Math.random() < 0.1) {
+                    console.log(`📡 Raydium Activity [Sample]: ${logs.signature.slice(0,8)}...`);
+                }
+
+                // Check for 'initialize2' instruction (New Pool Creation)
+                const isNewPool = logs.logs.some(log => log.includes('initialize2') || log.includes('InitializeInstruction2'));
                 
-                // Add to Queue instead of processing directly
-                queue.add(signature);
-            }
-        },
-        'confirmed'
-    );
+                if (isNewPool) {
+                    const signature = logs.signature;
+                    console.log(`\n🆕 NEW POOL DETECTED: https://solscan.io/tx/${signature}`);
+                    queue.add(signature);
+                }
+            },
+            'confirmed'
+        );
+        console.log(`✅ Subscription ID: ${subId}`);
+    } catch (e) {
+        console.error("❌ Failed to subscribe:", e);
+    }
+
+    // 🛡️ Watchdog: If no logs for 60s, exit (Railway will restart us)
+    setInterval(() => {
+        const timeSinceLast = Date.now() - lastLogTime;
+        if (timeSinceLast > 60000) {
+            console.error(`❌ NO ACTIVITY for 60s! WebSocket might be dead. Exiting to restart...`);
+            process.exit(1);
+        }
+    }, 10000);
 }
 
 main().catch(console.error);
