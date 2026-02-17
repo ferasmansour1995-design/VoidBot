@@ -38,34 +38,50 @@ function log(msg, type = 'INFO') {
 
 // --- SCANNING ---
 async function scanForTarget() {
-    log("Scanning DexScreener Trending...", 'SCAN');
+    log("Scanning DexScreener (Multi-Source)...", 'SCAN');
     try {
-        // Fetch Top Pairs for WSOL (So11111111111111111111111111111111111111112)
-        const url = `https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112`;
-        const resp = await axios.get(url, { timeout: 5000 });
-        const pairs = resp.data.pairs || [];
+        // Multi-Source Fetch to ensure we find candidates beyond just major pairs
+        const sources = [
+            `https://api.dexscreener.com/latest/dex/search/?q=solana`, // General Search
+            `https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112`, // WSOL Pairs
+            `https://api.dexscreener.com/latest/dex/tokens/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` // USDC Pairs
+        ];
+
+        const responses = await Promise.all(sources.map(url => axios.get(url, { timeout: 5000 }).catch(e => ({ data: { pairs: [] } }))));
+        
+        // Combine and Deduplicate
+        const allPairs = responses.flatMap(r => r.data.pairs || []);
+        const uniquePairs = Array.from(new Map(allPairs.map(p => [p.pairAddress, p])).values());
 
         // Apply "Survivor" Filters
-        const candidates = pairs.filter(p => {
+        const candidates = uniquePairs.filter(p => {
             const liq = p.liquidity?.usd || 0;
-            const fdv = p.fdv || 0;
             const ageHours = (Date.now() - p.pairCreatedAt) / (1000 * 60 * 60);
             
-            // DEBUG: Log first pair to see data structure
-            if (pairs.indexOf(p) === 0) {
-                 const isQuote = (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s');
-                 const isLiq = liq >= CONFIG.MIN_LIQUIDITY_USD;
-                 
-                 log(`DEBUG Sample: ${p.baseToken.symbol}/${p.quoteToken.symbol} | Liq: $${liq} | Chain: ${p.chainId} | Quote: ${isQuote} | LiqOK: ${isLiq}`, 'DEBUG');
+            // Determine which side is the target token (not SOL/USDC)
+            let targetToken = null;
+            if (p.baseToken.symbol === 'SOL' || p.baseToken.symbol === 'USDC' || p.baseToken.symbol === 'USDC.s') {
+                targetToken = p.quoteToken; // SOL is base, so target is quote
+            } else {
+                targetToken = p.baseToken; // SOL is quote, so target is base
             }
 
-            return (
-                p.chainId === 'solana' &&  // STRICTLY SOLANA
-                (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s') &&
+            // Simple validation to prevent errors
+            if (!targetToken) return false;
+
+            const isSurvivor = (
+                p.chainId === 'solana' &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
-                !CONFIG.BLACKLIST.includes(p.baseToken.symbol) && // SKIP MAJORS BY SYMBOL
-                p.baseToken.address !== 'So11111111111111111111111111111111111111112' // SKIP WRAPPED SOL BY ADDRESS
+                !CONFIG.BLACKLIST.includes(targetToken.symbol) &&
+                !CONFIG.BLACKLIST.includes(p.baseToken.symbol) // Double check base for safety
             );
+
+            // DEBUG: Log sample of REJECTED high liq pairs to understand filtering
+            if (!isSurvivor && liq > 100000 && p.chainId === 'solana' && Math.random() < 0.05) {
+                 log(`DEBUG Reject: ${p.baseToken.symbol}/${p.quoteToken.symbol} ($${liq}) - Blacklist? ${CONFIG.BLACKLIST.includes(targetToken.symbol)}`, 'DEBUG');
+            }
+
+            return isSurvivor;
         });
 
         if (candidates.length === 0) {
