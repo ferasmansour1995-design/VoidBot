@@ -104,6 +104,9 @@ async function manageTrade() {
         const bestPair = resp.data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
         currentPrice = parseFloat(bestPair.priceUsd);
         
+        // DEBUG: Log price every check to confirm activity
+        log(`${activeTrade.symbol}: $${currentPrice}`, 'TICK');
+        
     } catch (e) {
         log(`Price check failed for ${activeTrade.symbol}: ${e.message}`, 'WARN');
         return;
