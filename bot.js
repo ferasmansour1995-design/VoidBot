@@ -172,6 +172,16 @@ async function executeSell(price, reason) {
     activeTrade = null; // Resume Scanning
 }
 
+// --- GLOBAL ERROR HANDLING ---
+process.on('uncaughtException', (err) => {
+    log(`CRITICAL ERROR: ${err.message}\n${err.stack}`, 'FATAL');
+    // process.exit(1); // Keep it alive if possible? No, usually better to restart.
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    log(`Unhandled Rejection at: ${promise}, reason: ${reason}`, 'ERR');
+});
+
 // --- MAIN LOOP ---
 async function run() {
     log("--- HUNTER BOT STARTED ---", 'INIT');
