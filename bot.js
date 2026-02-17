@@ -71,7 +71,10 @@ async function scanForTarget() {
         // Sort by Volume (Momentum)
         candidates.sort((a, b) => (b.volume?.h1 || 0) - (a.volume?.h1 || 0));
         
-        const best = candidates[0];
+        // Pick a random candidate from the Top 3 to add variety (SOL vs Memes)
+        const topN = candidates.slice(0, 3);
+        const best = topN[Math.floor(Math.random() * topN.length)];
+        
         log(`Target Found: ${best.baseToken.symbol} ($${best.priceUsd}) | Vol: $${best.volume.h1}`, 'TARGET');
         return best;
 
