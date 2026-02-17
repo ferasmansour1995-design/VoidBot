@@ -173,6 +173,7 @@ async function executeBuy(target) {
 
     log(`>>> BUY ${activeTrade.symbol} @ $${price} (Mint: ${activeTrade.mint})`, 'TRADE');
     log(`    Position: ${tokens.toFixed(2)} tokens`);
+    log(`    Wallet: $${wallet.usd.toFixed(2)}`, 'CONF');
 }
 
 async function executeSell(price, reason) {
