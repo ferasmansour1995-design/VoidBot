@@ -144,6 +144,8 @@ async function manageTrades() {
         const diff = currentPrice - trade.entryPrice;
         const pnlPercent = (diff / trade.entryPrice) * 100;
         
+        log(`${trade.symbol}: $${currentPrice} (PnL: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`, 'TICK');
+
         // Decision Logic
         if (pnlPercent >= CONFIG.TAKE_PROFIT) {
             await executeSell(trade, currentPrice, "TAKE PROFIT");
@@ -187,11 +189,12 @@ async function executeSell(trade, price, reason) {
     const fee = CONFIG.SIM_FEE;
     const net = revenue - fee;
     const profit = net - CONFIG.BUY_AMOUNT_USD;
+    const pnlPercent = ((price - trade.entryPrice) / trade.entryPrice) * 100;
 
     wallet.usd += net;
     
     log(`<<< SELL ${trade.symbol} @ $${price} (${reason})`, 'TRADE');
-    log(`    Result: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
+    log(`    Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`);
     log(`    Wallet: $${wallet.usd.toFixed(2)}`);
 
     wallet.history.push({ 
