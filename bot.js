@@ -66,24 +66,86 @@ function log(msg, type = 'INFO') {
 
 // --- API ENDPOINTS ---
 app.get('/', (req, res) => {
-    res.send('VoidBot API Online');
+    res.send('VoidBot API Online v1.0');
 });
 
-app.get('/api/status', authMiddleware, (req, res) => {
-    res.json({
-        wallet: wallet.usd,
-        active_trades_count: activeTrades.length,
-        uptime: process.uptime()
+// ENDPOINT 1: All Token Purchases (Open + Closed)
+app.get('/api/v1/tokens', authMiddleware, (req, res) => {
+    const formatTrade = (t, status) => {
+        // For open trades, current is live price (or entry if tick missing). For closed, it's exit price.
+        const currentPrice = status === 'open' ? (t.lastPrice || t.entryPrice) : t.exitPrice;
+        const totalCost = t.entryPrice * t.tokens;
+        const currentValue = currentPrice * t.tokens;
+        const pnlUsd = currentValue - totalCost;
+        const pnlPercent = ((currentPrice - t.entryPrice) / t.entryPrice) * 100;
+
+        return {
+            token_symbol: t.symbol,
+            contract_address: t.mint,
+            purchase_date: new Date(t.startTime).toISOString(),
+            purchase_price: t.entryPrice,
+            current_price: currentPrice,
+            amount: t.tokens,
+            total_cost: totalCost,
+            current_value: currentValue,
+            pnl_usd: pnlUsd,
+            pnl_percentage: pnlPercent,
+            status: status
+        };
+    };
+
+    const openTrades = activeTrades.map(t => formatTrade(t, 'open'));
+    const closedTrades = wallet.history.map(t => formatTrade(t, 'closed'));
+
+    res.json([...openTrades, ...closedTrades]);
+});
+
+// ENDPOINT 2: Portfolio Summary
+app.get('/api/v1/portfolio/summary', authMiddleware, (req, res) => {
+    // 1. Calculate Open Position Value
+    let openValue = 0;
+    let openPnL = 0;
+    activeTrades.forEach(t => {
+        const curr = t.lastPrice || t.entryPrice;
+        openValue += (curr * t.tokens);
+        openPnL += (curr - t.entryPrice) * t.tokens;
     });
-});
 
-app.get('/api/trades', authMiddleware, (req, res) => {
-    // Calculate live PnL for display if possible (using last known prices)
-    res.json(activeTrades);
-});
+    // 2. Calculate Closed Metrics
+    let closedPnL = 0;
+    let wins = 0;
+    let totalHoldTime = 0;
+    
+    // Track Best/Worst
+    let bestTrade = null;
+    let worstTrade = null;
 
-app.get('/api/history', authMiddleware, (req, res) => {
-    res.json(wallet.history);
+    wallet.history.forEach(t => {
+        const pnl = (t.exitPrice - t.entryPrice) * t.tokens;
+        closedPnL += pnl;
+        if (pnl > 0) wins++;
+        totalHoldTime += (t.endTime - t.startTime);
+
+        if (!bestTrade || pnl > bestTrade.pnl) bestTrade = { symbol: t.symbol, pnl };
+        if (!worstTrade || pnl < worstTrade.pnl) worstTrade = { symbol: t.symbol, pnl };
+    });
+
+    const totalTrades = activeTrades.length + wallet.history.length;
+    const totalPortfolioValue = wallet.usd + openValue;
+    const startBalance = 10.00; // Hardcoded start for paper trading
+    const totalPnL = totalPortfolioValue - startBalance;
+    const pnlPercent = (totalPnL / startBalance) * 100;
+
+    res.json({
+        total_portfolio_value: totalPortfolioValue,
+        total_pnl_usd: totalPnL,
+        total_pnl_percentage: pnlPercent,
+        win_rate: totalTrades > 0 ? (wins / wallet.history.length) * 100 : 0, // Win rate based on closed trades
+        total_trades: totalTrades,
+        best_performer: bestTrade,
+        worst_performer: worstTrade,
+        average_hold_time_ms: wallet.history.length > 0 ? (totalHoldTime / wallet.history.length) : 0
+    });
 });
 
 app.get('/api/logs', authMiddleware, (req, res) => {
@@ -98,6 +160,10 @@ app.listen(PORT, () => {
 // --- SCANNING ---
 async function scanForTarget() {
     // Skip scanning if wallet is empty
+    if (wallet.usd < CONFIG.BUY_AMOUNT_USD) {
+        // log("Wallet below buy threshold. Scanning paused.", 'WAIT');
+        return null;
+    }
     if (wallet.usd < CONFIG.BUY_AMOUNT_USD) {
         // log("Wallet below buy threshold. Scanning paused.", 'WAIT');
         return null;
@@ -203,6 +269,9 @@ async function manageTrades() {
         const diff = currentPrice - trade.entryPrice;
         const pnlPercent = (diff / trade.entryPrice) * 100;
         
+        // Update lastPrice for API stats
+        trade.lastPrice = currentPrice;
+
         log(`${trade.symbol}: $${currentPrice} (PnL: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`, 'TICK');
 
         // Decision Logic
@@ -257,9 +326,15 @@ async function executeSell(trade, price, reason) {
     log(`    Wallet: $${wallet.usd.toFixed(2)}`);
 
     wallet.history.push({ 
-        symbol: trade.symbol, 
+        symbol: trade.symbol,
+        mint: trade.mint,
+        tokens: trade.tokens,
+        entryPrice: trade.entryPrice,
+        exitPrice: price,
         profit: profit, 
-        reason: reason 
+        reason: reason,
+        startTime: trade.startTime,
+        endTime: Date.now()
     });
     
     // Remove from active trades
