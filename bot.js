@@ -88,18 +88,21 @@ async function manageTrade() {
     let currentPrice = 0;
     
     try {
-        // Jup v2 Price API
-        const url = `https://api.jup.ag/price/v2?ids=${mint}`;
-        const resp = await axios.get(url);
+        // Switch to DexScreener Price API (Jupiter returned 401)
+        const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
+        const resp = await axios.get(url, { timeout: 5000 });
         
-        if (!resp.data.data[mint]) {
-             log(`Price API returned no data for mint: ${mint}`, 'ERR');
+        if (!resp.data.pairs || resp.data.pairs.length === 0) {
+             log(`Price API returned no pairs for mint: ${mint}`, 'ERR');
              return;
         }
         
-        currentPrice = parseFloat(resp.data.data[mint].price);
+        // Get price from the most liquid pair
+        const bestPair = resp.data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        currentPrice = parseFloat(bestPair.priceUsd);
+        
     } catch (e) {
-        log(`Price check failed for ${activeTrade.symbol} (Mint: ${mint}): ${e.message}`, 'WARN');
+        log(`Price check failed for ${activeTrade.symbol}: ${e.message}`, 'WARN');
         return;
     }
 
