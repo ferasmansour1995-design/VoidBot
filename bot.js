@@ -28,7 +28,7 @@ const CONFIG = {
 
 // --- STATE ---
 let wallet = { usd: 10.00, history: [] };
-let activeTrade = null; // { mint, symbol, entryPrice, tokens }
+let activeTrades = []; // Array of { mint, symbol, entryPrice, tokens, startTime }
 
 // --- LOGGING ---
 function log(msg, type = 'INFO') {
@@ -38,6 +38,12 @@ function log(msg, type = 'INFO') {
 
 // --- SCANNING ---
 async function scanForTarget() {
+    // Skip scanning if wallet is empty
+    if (wallet.usd < CONFIG.BUY_AMOUNT_USD) {
+        // log("Wallet below buy threshold. Scanning paused.", 'WAIT');
+        return null;
+    }
+
     log("Scanning DexScreener (Multi-Source)...", 'SCAN');
     try {
         // Multi-Source Fetch to ensure we find candidates beyond just major pairs
@@ -56,7 +62,6 @@ async function scanForTarget() {
         // Apply "Survivor" Filters
         const candidates = uniquePairs.filter(p => {
             const liq = p.liquidity?.usd || 0;
-            const ageHours = (Date.now() - p.pairCreatedAt) / (1000 * 60 * 60);
             
             // Determine which side is the target token (not SOL/USDC)
             let targetToken = null;
@@ -69,17 +74,16 @@ async function scanForTarget() {
             // Simple validation to prevent errors
             if (!targetToken) return false;
 
+            // Avoid buying same token twice
+            const alreadyHolding = activeTrades.some(t => t.mint === targetToken.address);
+            if (alreadyHolding) return false;
+
             const isSurvivor = (
                 p.chainId === 'solana' &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
                 !CONFIG.BLACKLIST.includes(targetToken.symbol) &&
                 !CONFIG.BLACKLIST.includes(p.baseToken.symbol) // Double check base for safety
             );
-
-            // DEBUG: Log sample of REJECTED high liq pairs to understand filtering
-            if (!isSurvivor && liq > 100000 && p.chainId === 'solana' && Math.random() < 0.05) {
-                 log(`DEBUG Reject: ${p.baseToken.symbol}/${p.quoteToken.symbol} ($${liq}) - Blacklist? ${CONFIG.BLACKLIST.includes(targetToken.symbol)}`, 'DEBUG');
-            }
 
             return isSurvivor;
         });
@@ -106,53 +110,53 @@ async function scanForTarget() {
 }
 
 // --- TRADING ENGINE ---
-async function manageTrade() {
-    // 1. Get Live Price
-    const mint = activeTrade.mint;
-    let currentPrice = 0;
-    
-    try {
-        // Switch to DexScreener Price API (Jupiter returned 401)
-        const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
-        const resp = await axios.get(url, { timeout: 5000 });
+async function manageTrades() {
+    if (activeTrades.length === 0) return;
+
+    // Process all trades in parallel
+    await Promise.all(activeTrades.map(async (trade) => {
+        const mint = trade.mint;
+        let currentPrice = 0;
         
-        if (!resp.data.pairs || resp.data.pairs.length === 0) {
-             log(`Price API returned no pairs for mint: ${mint}`, 'ERR');
-             return;
+        try {
+            const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
+            const resp = await axios.get(url, { timeout: 5000 });
+            
+            if (!resp.data.pairs || resp.data.pairs.length === 0) {
+                 log(`Price API returned no pairs for mint: ${mint}`, 'ERR');
+                 return;
+            }
+            
+            // Get price from the most liquid pair
+            const bestPair = resp.data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+            currentPrice = parseFloat(bestPair.priceUsd);
+            
+            log(`${trade.symbol}: $${currentPrice} (Mint: ${trade.mint})`, 'TICK');
+            
+        } catch (e) {
+            log(`Price check failed for ${trade.symbol}: ${e.message}`, 'WARN');
+            return;
         }
-        
-        // Get price from the most liquid pair
-        const bestPair = resp.data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
-        currentPrice = parseFloat(bestPair.priceUsd);
-        
-        // DEBUG: Log price every check to confirm activity
-        log(`${activeTrade.symbol}: $${currentPrice} (Mint: ${activeTrade.mint})`, 'TICK');
-        
-    } catch (e) {
-        log(`Price check failed for ${activeTrade.symbol}: ${e.message}`, 'WARN');
-        return;
-    }
 
-    if (!currentPrice) return;
+        if (!currentPrice) return;
 
-    // 2. Calc PnL
-    const diff = currentPrice - activeTrade.entryPrice;
-    const pnlPercent = (diff / activeTrade.entryPrice) * 100;
-    
-    // log(`${activeTrade.symbol}: $${currentPrice} (PnL: ${pnlPercent.toFixed(2)}%)`);
-
-    // 3. Decision Logic
-    if (pnlPercent >= CONFIG.TAKE_PROFIT) {
-        await executeSell(currentPrice, "TAKE PROFIT");
-    } else if (pnlPercent <= -CONFIG.STOP_LOSS) {
-        await executeSell(currentPrice, "STOP LOSS");
-    }
+        // Calc PnL
+        const diff = currentPrice - trade.entryPrice;
+        const pnlPercent = (diff / trade.entryPrice) * 100;
+        
+        // Decision Logic
+        if (pnlPercent >= CONFIG.TAKE_PROFIT) {
+            await executeSell(trade, currentPrice, "TAKE PROFIT");
+        } else if (pnlPercent <= -CONFIG.STOP_LOSS) {
+            await executeSell(trade, currentPrice, "STOP LOSS");
+        }
+    }));
 }
 
 async function executeBuy(target) {
     if (wallet.usd < CONFIG.BUY_AMOUNT_USD) {
-        log("Wallet empty. Game Over.", 'END');
-        process.exit(0);
+        log("Wallet insufficient funds.", 'SKIP');
+        return;
     }
 
     const price = parseFloat(target.priceUsd);
@@ -163,7 +167,7 @@ async function executeBuy(target) {
 
     wallet.usd -= cost;
     
-    activeTrade = {
+    const newTrade = {
         mint: target.baseToken.address,
         symbol: target.baseToken.symbol,
         entryPrice: price,
@@ -171,65 +175,52 @@ async function executeBuy(target) {
         startTime: Date.now()
     };
 
-    log(`>>> BUY ${activeTrade.symbol} @ $${price} (Mint: ${activeTrade.mint})`, 'TRADE');
+    activeTrades.push(newTrade);
+
+    log(`>>> BUY ${newTrade.symbol} @ $${price} (Mint: ${newTrade.mint})`, 'TRADE');
     log(`    Position: ${tokens.toFixed(2)} tokens`);
-    log(`    Wallet: $${wallet.usd.toFixed(2)}`, 'CONF');
+    log(`    Wallet: $${wallet.usd.toFixed(2)} (Active Trades: ${activeTrades.length})`, 'CONF');
 }
 
-async function executeSell(price, reason) {
-    const revenue = activeTrade.tokens * price;
+async function executeSell(trade, price, reason) {
+    const revenue = trade.tokens * price;
     const fee = CONFIG.SIM_FEE;
     const net = revenue - fee;
     const profit = net - CONFIG.BUY_AMOUNT_USD;
 
     wallet.usd += net;
     
-    log(`<<< SELL ${activeTrade.symbol} @ $${price} (${reason})`, 'TRADE');
+    log(`<<< SELL ${trade.symbol} @ $${price} (${reason})`, 'TRADE');
     log(`    Result: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
     log(`    Wallet: $${wallet.usd.toFixed(2)}`);
 
     wallet.history.push({ 
-        symbol: activeTrade.symbol, 
+        symbol: trade.symbol, 
         profit: profit, 
         reason: reason 
     });
     
-    activeTrade = null; // Resume Scanning
+    // Remove from active trades
+    activeTrades = activeTrades.filter(t => t.mint !== trade.mint);
 }
-
-// --- GLOBAL ERROR HANDLING ---
-process.on('uncaughtException', (err) => {
-    log(`CRITICAL ERROR: ${err.message}\n${err.stack}`, 'FATAL');
-    // process.exit(1); // Keep it alive if possible? No, usually better to restart.
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    log(`Unhandled Rejection at: ${promise}, reason: ${reason}`, 'ERR');
-});
 
 // --- MAIN LOOP ---
 async function run() {
     log("--- HUNTER BOT STARTED ---", 'INIT');
-    log(`Strategy: Survivor Scalp (Liq > $${CONFIG.MIN_LIQUIDITY_USD}, Age > ${CONFIG.MIN_PAIR_AGE_HOURS}h)`, 'CONF');
+    log(`Strategy: Multi-Slot Survivor Scalp (Liq > $${CONFIG.MIN_LIQUIDITY_USD}, Age > ${CONFIG.MIN_PAIR_AGE_HOURS}h)`, 'CONF');
     log(`Wallet: $${wallet.usd.toFixed(2)}`, 'CONF');
 
-    while(true) {
-        if (!activeTrade) {
-            // HUNT MODE
-            const target = await scanForTarget();
-            if (target) {
-                // In a real bot, we might wait for a dip here.
-                // For this simulation, we enter the best momentum candidate immediately.
-                await executeBuy(target);
-            } else {
-                await new Promise(r => setTimeout(r, CONFIG.SCAN_INTERVAL_MS));
-            }
-        } else {
-            // MANAGE MODE
-            await manageTrade();
-            await new Promise(r => setTimeout(r, CONFIG.PRICE_CHECK_MS));
+    // Run loops concurrently
+    setInterval(async () => {
+        const target = await scanForTarget();
+        if (target) {
+            await executeBuy(target);
         }
-    }
+    }, CONFIG.SCAN_INTERVAL_MS);
+
+    setInterval(async () => {
+        await manageTrades();
+    }, CONFIG.PRICE_CHECK_MS);
 }
 
 run();
