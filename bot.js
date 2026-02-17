@@ -50,15 +50,14 @@ async function scanForTarget() {
             
             // DEBUG: Log first pair to see data structure
             if (pairs.indexOf(p) === 0) {
-                 const isChain = p.chainId === 'solana';
                  const isQuote = (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s');
                  const isLiq = liq >= CONFIG.MIN_LIQUIDITY_USD;
                  
-                 log(`DEBUG Sample: ${p.baseToken.symbol}/${p.quoteToken.symbol} | Liq: $${liq} | Chain: ${isChain} | Quote: ${isQuote} | LiqOK: ${isLiq}`, 'DEBUG');
+                 log(`DEBUG Sample: ${p.baseToken.symbol}/${p.quoteToken.symbol} | Liq: $${liq} | Chain: ${p.chainId} | Quote: ${isQuote} | LiqOK: ${isLiq}`, 'DEBUG');
             }
 
             return (
-                p.chainId === 'solana' &&
+                // IGNORE CHAIN CHECK (assume Solana endpoint is correct)
                 (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s') &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD 
             );
@@ -92,9 +91,15 @@ async function manageTrade() {
         // Jup v2 Price API
         const url = `https://api.jup.ag/price/v2?ids=${mint}`;
         const resp = await axios.get(url);
+        
+        if (!resp.data.data[mint]) {
+             log(`Price API returned no data for mint: ${mint}`, 'ERR');
+             return;
+        }
+        
         currentPrice = parseFloat(resp.data.data[mint].price);
     } catch (e) {
-        log(`Price check failed for ${activeTrade.symbol}, skipping tick.`, 'WARN');
+        log(`Price check failed for ${activeTrade.symbol} (Mint: ${mint}): ${e.message}`, 'WARN');
         return;
     }
 
