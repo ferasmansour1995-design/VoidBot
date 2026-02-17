@@ -30,11 +30,70 @@ const CONFIG = {
 let wallet = { usd: 10.00, history: [] };
 let activeTrades = []; // Array of { mint, symbol, entryPrice, tokens, startTime }
 
-// --- LOGGING ---
+const express = require('express');
+const cors = require('cors');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+// --- AUTH MIDDLEWARE ---
+const AUTH_KEY = process.env.API_KEY || 'test-key-123'; // Default for testing, change in prod
+const authMiddleware = (req, res, next) => {
+    const key = req.headers['x-api-key'];
+    if (!key || key !== AUTH_KEY) {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    next();
+};
+
+// --- LOGGING STORAGE ---
+const LOG_HISTORY_SIZE = 100;
+let logHistory = [];
+
 function log(msg, type = 'INFO') {
     const ts = new Date().toISOString().substring(11, 19);
-    console.log(`[${ts}] [${type}] ${msg}`);
+    const logEntry = `[${ts}] [${type}] ${msg}`;
+    console.log(logEntry);
+    
+    // Store in memory for API
+    logHistory.push({ ts, type, msg });
+    if (logHistory.length > LOG_HISTORY_SIZE) {
+        logHistory.shift();
+    }
 }
+
+// --- API ENDPOINTS ---
+app.get('/', (req, res) => {
+    res.send('VoidBot API Online');
+});
+
+app.get('/api/status', authMiddleware, (req, res) => {
+    res.json({
+        wallet: wallet.usd,
+        active_trades_count: activeTrades.length,
+        uptime: process.uptime()
+    });
+});
+
+app.get('/api/trades', authMiddleware, (req, res) => {
+    // Calculate live PnL for display if possible (using last known prices)
+    res.json(activeTrades);
+});
+
+app.get('/api/history', authMiddleware, (req, res) => {
+    res.json(wallet.history);
+});
+
+app.get('/api/logs', authMiddleware, (req, res) => {
+    res.json(logHistory);
+});
+
+// Start Server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 // --- SCANNING ---
 async function scanForTarget() {
