@@ -109,7 +109,7 @@ async function manageTrade() {
         currentPrice = parseFloat(bestPair.priceUsd);
         
         // DEBUG: Log price every check to confirm activity
-        log(`${activeTrade.symbol}: $${currentPrice}`, 'TICK');
+        log(`${activeTrade.symbol}: $${currentPrice} (Mint: ${activeTrade.mint})`, 'TICK');
         
     } catch (e) {
         log(`Price check failed for ${activeTrade.symbol}: ${e.message}`, 'WARN');
@@ -154,7 +154,7 @@ async function executeBuy(target) {
         startTime: Date.now()
     };
 
-    log(`>>> BUY ${activeTrade.symbol} @ $${price}`, 'TRADE');
+    log(`>>> BUY ${activeTrade.symbol} @ $${price} (Mint: ${activeTrade.mint})`, 'TRADE');
     log(`    Position: ${tokens.toFixed(2)} tokens`);
 }
 
