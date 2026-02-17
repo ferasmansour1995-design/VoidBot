@@ -60,10 +60,11 @@ async function scanForTarget() {
             }
 
             return (
-                // IGNORE CHAIN CHECK (assume Solana endpoint is correct)
+                p.chainId === 'solana' &&  // STRICTLY SOLANA
                 (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s') &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
-                !CONFIG.BLACKLIST.includes(p.baseToken.symbol) // SKIP MAJORS
+                !CONFIG.BLACKLIST.includes(p.baseToken.symbol) && // SKIP MAJORS BY SYMBOL
+                p.baseToken.address !== 'So11111111111111111111111111111111111111112' // SKIP WRAPPED SOL BY ADDRESS
             );
         });
 
