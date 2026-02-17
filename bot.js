@@ -16,6 +16,9 @@ const CONFIG = {
     MIN_FDV: 50000,
     MIN_PAIR_AGE_HOURS: 1,     // Avoid brand new rugs
     
+    // BLACKLIST (Major tokens to skip in favor of memes)
+    BLACKLIST: ['SOL', 'USDC', 'USDT', 'MSOL', 'JUP', 'WIF', 'BONK', 'RAY'], 
+    
     // TRADING
     BUY_AMOUNT_USD: 3.33,      // 1/3 of Portfolio per trade
     TAKE_PROFIT: 15.0,         // +15%
@@ -59,7 +62,8 @@ async function scanForTarget() {
             return (
                 // IGNORE CHAIN CHECK (assume Solana endpoint is correct)
                 (p.quoteToken.symbol === 'SOL' || p.quoteToken.symbol === 'USDC' || p.quoteToken.symbol === 'USDC.s') &&
-                liq >= CONFIG.MIN_LIQUIDITY_USD 
+                liq >= CONFIG.MIN_LIQUIDITY_USD &&
+                !CONFIG.BLACKLIST.includes(p.baseToken.symbol) // SKIP MAJORS
             );
         });
 
