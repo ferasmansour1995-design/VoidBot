@@ -20,15 +20,16 @@ const CONFIG = {
     BLACKLIST: ['SOL', 'USDC', 'USDT', 'MSOL', 'JUP', 'WIF', 'BONK', 'RAY'], 
     
     // TRADING
-    BUY_AMOUNT_USD: 3.33,      // 1/3 of Portfolio per trade
+    BUY_AMOUNT_USD: 1.80,      // ~1/5 of Portfolio (Spray and Pray)
     TAKE_PROFIT: 15.0,         // +15%
     STOP_LOSS: 10.0,           // -10%
+    BOREDOM_MS: 10 * 60 * 1000, // 10 Minutes
     SIM_FEE: 0.02
 };
 
 // --- STATE ---
 let wallet = { usd: 10.00, history: [] };
-let activeTrades = []; // Array of { mint, symbol, entryPrice, tokens, startTime }
+let activeTrades = []; // Array of { mint, symbol, entryPrice, tokens, startTime, lastPrice }
 
 const express = require('express');
 const cors = require('cors');
@@ -275,10 +276,14 @@ async function manageTrades() {
         log(`${trade.symbol}: $${currentPrice} (PnL: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`, 'TICK');
 
         // Decision Logic
+        const timeHeld = Date.now() - trade.startTime;
+        
         if (pnlPercent >= CONFIG.TAKE_PROFIT) {
             await executeSell(trade, currentPrice, "TAKE PROFIT");
         } else if (pnlPercent <= -CONFIG.STOP_LOSS) {
             await executeSell(trade, currentPrice, "STOP LOSS");
+        } else if (timeHeld > CONFIG.BOREDOM_MS && Math.abs(pnlPercent) < 2.0) {
+            await executeSell(trade, currentPrice, "BOREDOM (Stagnant)");
         }
     }));
 }
