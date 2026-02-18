@@ -24,12 +24,14 @@ const CONFIG = {
     TAKE_PROFIT: 15.0,         // +15%
     STOP_LOSS: 10.0,           // -10%
     BOREDOM_MS: 10 * 60 * 1000, // 10 Minutes
+    COOLDOWN_MS: 30 * 60 * 1000, // 30 Minutes
     SIM_FEE: 0.02
 };
 
 // --- STATE ---
 let wallet = { usd: 10.00, history: [] };
 let activeTrades = []; // Array of { mint, symbol, entryPrice, tokens, startTime, lastPrice }
+let cooldowns = new Map(); // Map<Mint, Timestamp>
 
 const express = require('express');
 const cors = require('cors');
@@ -204,6 +206,12 @@ async function scanForTarget() {
             const alreadyHolding = activeTrades.some(t => t.mint === targetToken.address);
             if (alreadyHolding) return false;
 
+            // Check Cooldown
+            const lastSoldTime = cooldowns.get(targetToken.address);
+            if (lastSoldTime && (Date.now() - lastSoldTime) < CONFIG.COOLDOWN_MS) {
+                return false;
+            }
+
             const isSurvivor = (
                 p.chainId === 'solana' &&
                 liq >= CONFIG.MIN_LIQUIDITY_USD &&
@@ -344,6 +352,9 @@ async function executeSell(trade, price, reason) {
     
     // Remove from active trades
     activeTrades = activeTrades.filter(t => t.mint !== trade.mint);
+    
+    // Add to Cooldown
+    cooldowns.set(trade.mint, Date.now());
 }
 
 // --- MAIN LOOP ---
