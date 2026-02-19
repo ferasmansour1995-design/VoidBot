@@ -140,6 +140,7 @@ app.get('/api/v1/portfolio/summary', authMiddleware, (req, res) => {
     const pnlPercent = (totalPnL / startBalance) * 100;
 
     res.json({
+        wallet_balance: wallet.usd, // Raw cash
         total_portfolio_value: totalPortfolioValue,
         total_pnl_usd: totalPnL,
         total_pnl_percentage: pnlPercent,
